@@ -1,0 +1,651 @@
+{
+  "name": "30 - Escalate to Team",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 30 - Escalate to Team\nClaims the handoff once (a second message cannot hand off twice), posts the transcript to Slack, saves the Slack thread and emails the team with reply-to set to the customer. A message after the handoff goes into the same Slack thread. Test runs (dry run) build everything but send nothing.",
+        "height": 200,
+        "width": 620,
+        "color": 4
+      },
+      "id": "aa5bd5fe-0f6a-5a3c-bf80-241ecb0cb7b0",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "f659a84b-31ec-51cd-816f-7da1caa022b1",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8624b211-d190-58d4-b604-71495f71b223",
+              "name": "supabase_url",
+              "value": "https://YOUR-PROJECT.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "dd91d80c-2253-511e-bbfd-5f09c343046d",
+              "name": "n8n_url",
+              "value": "https://YOUR-INSTANCE.app.n8n.cloud",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "4de044cf-054b-57db-9527-c9667a1bb498",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9ff903cc-53d3-5a8a-9885-4da6fca0da76",
+              "leftValue": "={{ $json.action === 'handoff_followup' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "3b1e0f83-0af2-5334-b60b-4f21b016b28a",
+      "name": "Follow-up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.supabase_url }}/rest/v1/conversations?session_id=eq.{{ encodeURIComponent($json.session_id) }}&select=session_id,slack_ts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "3b2893d2-f4d9-5838-ac0e-fe2c8f9725d6",
+      "name": "Get Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Follow-up Message: the chat was already handed off, so the customer's new message goes into\n// the same Slack thread instead of creating a second handoff.\nconst inp = $('Config').first().json;\nconst conv = $input.all().map((i) => i.json).find((j) => j && j.session_id) || {};\nconst text = `*Follow-up from the customer* (session \\`${inp.session_id}\\`)\\n> ${String(inp.latest_text || '').slice(0, 1500)}`;\nconst body = { channel: inp.slack_channel, text, unfurl_links: false };\nif (conv.slack_ts) body.thread_ts = String(conv.slack_ts);\nreturn [{ json: { body, has_thread: !!conv.slack_ts } }];\n"
+      },
+      "id": "5816a411-a23f-55e7-bab4-39de9993cade",
+      "name": "Follow-up Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "618da49d-742b-53d2-a814-521786e8e2af",
+              "leftValue": "={{ !!$('Config').first().json.dry_run }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7b90e65f-fd87-52c0-89f8-9b5b1c2eeef7",
+      "name": "Dry Run Follow-up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "8f74218c-47c3-5989-8b21-83d1e9548ead",
+      "name": "Post Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        240
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "scSlackCred00001",
+          "name": "Slack Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return Follow-up: reports whether the follow-up reached the Slack thread.\nconst dryRun = !!$('Config').first().json.dry_run;\nconst m = $('Follow-up Message').first().json;\nlet sent = null;\nif (!dryRun && $('Post Follow-up').isExecuted) {\n  const r = $('Post Follow-up').first().json || {};\n  sent = r.ok === true;\n}\nreturn [{ json: { claimed: false, followup: true, dry_run: dryRun, sent_slack: sent, in_thread: m.has_thread } }];\n"
+      },
+      "id": "ed59ee44-1ef3-50ca-a3bd-0db725287e5b",
+      "name": "Return Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url }}/rest/v1/rpc/claim_handoff",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_session_id: $json.session_id, p_reason: $json.reason || 'asked_for_person' }) }}",
+        "options": {}
+      },
+      "id": "399d2fcb-9f5a-5f5d-8008-7f2d4ebf3a00",
+      "name": "Claim Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        440
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eb5c3148-8e0a-59ee-8d2f-1f5c54beee5f",
+              "leftValue": "={{ $json.claimed === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "63a36336-5e45-53ca-8974-d2328f64ec41",
+      "name": "Claimed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Handoff: the Slack message and the email for the team, with the full transcript.\nconst inp = $('Config').first().json;\nconst claim = $input.first().json;\nconst c = claim.conversation || {};\nconst transcript = Array.isArray(claim.transcript) ? claim.transcript : [];\n\nconst reasonLabel = {\n  asked_for_person: 'Customer asked for a person',\n  frustrated: 'Customer seems frustrated',\n  outside_kb: 'Question not covered by the help articles',\n}[inp.reason] || String(inp.reason || 'Handoff');\nconst channelLabel = { web: 'Website chat', whatsapp: 'WhatsApp', test: 'Test' }[c.channel || inp.channel] || c.channel || inp.channel;\nconst who = [c.contact_name || 'Name not given', c.contact_email || 'no email given', c.contact_phone || null]\n  .filter(Boolean)\n  .join(' | ');\n\nconst lines = transcript.map((t) => `${t.role === 'user' ? 'Customer' : 'Assistant'}: ${String(t.content).replace(/\\s+/g, ' ').trim()}`);\nconst transcriptText = lines.join('\\n');\n\n// Slack shows the latest lines that fit; the email always has everything.\nconst slackLines = [];\nlet used = 0;\nfor (let i = lines.length - 1; i >= 0; i--) {\n  const line = `> ${lines[i].slice(0, 600)}`;\n  if (used + line.length > 3000) {\n    slackLines.unshift('> (earlier messages are in the email)');\n    break;\n  }\n  slackLines.unshift(line);\n  used += line.length + 1;\n}\n\nconst slackText = [\n  `*Chat handoff:* ${reasonLabel}`,\n  `*Customer:* ${who}`,\n  `*Channel:* ${channelLabel}    *Issue:* ${c.issue_type || 'not classified'}    *Customer messages:* ${c.message_count ?? ''}`,\n  `*Session:* \\`${c.session_id || inp.session_id}\\``,\n  '',\n  '*Conversation*',\n  ...slackLines,\n].join('\\n');\n\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst rows = transcript.map((t) => `\n  <tr>\n    <td style=\"padding:8px 12px;vertical-align:top;color:#5b6470;white-space:nowrap;font-weight:600\">${t.role === 'user' ? 'Customer' : 'Assistant'}</td>\n    <td style=\"padding:8px 12px;vertical-align:top;color:#101820\">${esc(t.content).replace(/\\n/g, '<br>')}</td>\n  </tr>`).join('');\n\nconst html = `<div style=\"font-family:Inter,Segoe UI,Arial,sans-serif;max-width:680px;color:#101820\">\n  <p style=\"font-size:16px;margin:0 0 4px\"><strong>Chat handoff:</strong> ${esc(reasonLabel)}</p>\n  <p style=\"margin:0 0 16px;color:#5b6470\">Reply to this email to reach the customer directly${c.contact_email ? '' : ' (no email address was given)'}.</p>\n  <table style=\"border-collapse:collapse;margin-bottom:16px\">\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Customer</td><td>${esc(c.contact_name || 'Name not given')}</td></tr>\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Email</td><td>${esc(c.contact_email || 'not given')}</td></tr>\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Phone</td><td>${esc(c.contact_phone || 'not given')}</td></tr>\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Channel</td><td>${esc(channelLabel)}</td></tr>\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Issue type</td><td>${esc(c.issue_type || 'not classified')}</td></tr>\n    <tr><td style=\"padding:2px 12px 2px 0;color:#5b6470\">Session</td><td>${esc(c.session_id || inp.session_id)}</td></tr>\n  </table>\n  <table style=\"border-collapse:collapse;width:100%;border-top:1px solid #dfe3e8\">${rows}</table>\n  <p style=\"margin-top:16px;color:#5b6470;font-size:12px\">Sent by the support chat assistant. Solvant Labs demo build.</p>\n</div>`;\n\nconst subject = `[Chat handoff] ${reasonLabel}: ${c.contact_name || c.contact_email || c.session_id || inp.session_id}`;\n\nreturn [{\n  json: {\n    session_id: c.session_id || inp.session_id,\n    slack_channel: inp.slack_channel,\n    team_email: inp.team_email,\n    from_email: inp.from_email,\n    reply_to: c.contact_email || '',\n    slack_text: slackText,\n    subject,\n    html,\n    transcript_text: transcriptText,\n    transcript_lines: lines.length,\n  },\n}];\n"
+      },
+      "id": "a297f0ad-cc14-5121-a754-0bb00df8b87e",
+      "name": "Build Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "618da49d-742b-53d2-a814-521786e8e2af",
+              "leftValue": "={{ !!$('Config').first().json.dry_run }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0db9b23c-27e2-56a7-89bc-55b45002126f",
+      "name": "Dry Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.slack_channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "mrkdwn": true
+        }
+      },
+      "id": "ce708f74-3a4a-538c-a1d1-3aa063c08487",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1540,
+        540
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "scSlackCred00001",
+          "name": "Slack Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/conversations?session_id=eq.{{ encodeURIComponent($('Build Handoff').first().json.session_id) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ slack_ts: $json.ts || ($json.message && $json.message.ts) || null }) }}",
+        "options": {}
+      },
+      "id": "f8dcbdba-bb72-5a20-b8fb-c4b7b3e89d96",
+      "name": "Save Slack Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        540
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Build Handoff').first().json.from_email }}",
+        "toEmail": "={{ $('Build Handoff').first().json.team_email }}",
+        "subject": "={{ $('Build Handoff').first().json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $('Build Handoff').first().json.html }}",
+        "options": {
+          "appendAttribution": false,
+          "replyTo": "={{ $('Build Handoff').first().json.reply_to }}"
+        }
+      },
+      "id": "22359b9d-aae5-5fdb-9000-415d12f2798e",
+      "name": "Email Team",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1980,
+        540
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "scSmtpCred000001",
+          "name": "SMTP"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return Handoff: reports what was delivered. If neither Slack nor email worked, the run fails\n// on purpose so the error workflow alerts the team with the session ID.\nconst b = $('Build Handoff').first().json;\nconst dryRun = !!$('Config').first().json.dry_run;\nlet sentSlack = null;\nlet sentEmail = null;\nlet slackTs = null;\nconst errors = [];\n\nif (!dryRun) {\n  if ($('Post to Slack').isExecuted) {\n    const s = $('Post to Slack').first().json || {};\n    sentSlack = !s.error && s.ok !== false;\n    slackTs = s.ts || (s.message && s.message.ts) || null;\n    if (s.error) errors.push(`Slack: ${s.error.message || JSON.stringify(s.error).slice(0, 200)}`);\n  }\n  if ($('Email Team').isExecuted) {\n    const e = $('Email Team').first().json || {};\n    sentEmail = !e.error;\n    if (e.error) errors.push(`Email: ${e.error.message || JSON.stringify(e.error).slice(0, 200)}`);\n  }\n  if (!sentSlack && !sentEmail) {\n    throw new Error(`Handoff for ${b.session_id} could not be delivered. ${errors.join(' | ')}`);\n  }\n}\n\nreturn [{\n  json: {\n    claimed: true,\n    dry_run: dryRun,\n    sent_slack: sentSlack,\n    sent_email: sentEmail,\n    slack_ts: slackTs,\n    errors,\n    transcript_lines: b.transcript_lines,\n    transcript_text: b.transcript_text,\n    slack_text: b.slack_text,\n    email_subject: b.subject,\n  },\n}];\n"
+      },
+      "id": "c728ca49-cd3f-5874-97b5-17ee5852a691",
+      "name": "Return Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return Already: another message handed this chat off first, so nothing is sent twice.\nreturn [{ json: { claimed: false, already_handed_off: true, dry_run: !!$('Config').first().json.dry_run } }];\n"
+      },
+      "id": "ef2334d8-8355-5a5f-ac4a-5ab909a8d890",
+      "name": "Return Already",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        640
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Follow-up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up?": {
+      "main": [
+        [
+          {
+            "node": "Get Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Conversation": {
+      "main": [
+        [
+          {
+            "node": "Follow-up Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up Message": {
+      "main": [
+        [
+          {
+            "node": "Dry Run Follow-up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry Run Follow-up?": {
+      "main": [
+        [
+          {
+            "node": "Return Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Return Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Handoff": {
+      "main": [
+        [
+          {
+            "node": "Claimed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claimed?": {
+      "main": [
+        [
+          {
+            "node": "Build Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Already",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Handoff": {
+      "main": [
+        [
+          {
+            "node": "Dry Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry Run?": {
+      "main": [
+        [
+          {
+            "node": "Return Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Slack": {
+      "main": [
+        [
+          {
+            "node": "Save Slack Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Slack Thread": {
+      "main": [
+        [
+          {
+            "node": "Email Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Team": {
+      "main": [
+        [
+          {
+            "node": "Return Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "scErrorAlerts000"
+  },
+  "versionId": "380e1627-b8fa-5818-a1d3-a4363cc000e8",
+  "id": "scEscalate000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,474 @@
+{
+  "name": "00 - Setup Check",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 00 - Setup Check\nRun after setup and after any credential change. Checks the settings, the database functions, the Gemini model with structured output, embeddings, the knowledge base, the Drive folder and the Google Sheet, then posts PASS/FAIL lines to Slack.",
+        "height": 180,
+        "width": 600,
+        "color": 4
+      },
+      "id": "eb6ecd11-1fa9-50c7-affe-525cac7ea5dd",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "01d585a7-65a4-5830-95fc-16dad642fe10",
+      "name": "Run Check",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8624b211-d190-58d4-b604-71495f71b223",
+              "name": "supabase_url",
+              "value": "https://YOUR-PROJECT.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "c62ef946-be5e-54a1-a1f8-e0a6ac659d67",
+              "name": "gemini_url",
+              "value": "https://generativelanguage.googleapis.com/v1beta",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "98e94965-ec80-594c-b562-211c84c4d865",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.supabase_url }}/rest/v1/bot_settings?select=key,value",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "ab218bd8-dbec-582b-9449-ef54554a82ce",
+      "name": "Read Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Settings Object: settings as one object, plus the two tiny requests for the model and embedding checks.\nconst rows = $input.all().map((i) => i.json).filter((j) => j && j.key);\nconst settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));\nconst dims = parseInt(settings.embedding_dimensions, 10) || 1536;\nconst model_body = {\n  systemInstruction: { parts: [{ text: 'You are a setup check. Reply as JSON.' }] },\n  contents: [{ role: 'user', parts: [{ text: 'Setup check. Reply with ok set to true.' }] }],\n  generationConfig: { temperature: 0, maxOutputTokens: 200, responseMimeType: 'application/json',\n    responseSchema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } } },\n};\nconst embed_body = { content: { parts: [{ text: 'setup check' }] }, taskType: 'RETRIEVAL_QUERY', outputDimensionality: dims };\nreturn [{ json: { settings, model_body, embed_body, expected_dims: dims, ok: rows.length > 0 } }];\n"
+      },
+      "id": "0bd5025b-b663-59e7-ac48-85e4bd8868fb",
+      "name": "Settings Object",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/rpc/register_message",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_session_id: 'setup-check-' + Date.now(), p_channel: 'test', p_text: 'Setup check', p_is_test: true }) }}",
+        "options": {}
+      },
+      "id": "199fb069-b44b-56c7-97ec-2893bd0e9a1e",
+      "name": "Check Functions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gemini_url }}/models/{{ $('Settings Object').first().json.settings.model }}:generateContent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Settings Object').first().json.model_body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "5dae955b-464c-584f-aa05-44984624921c",
+      "name": "Check Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "scGeminiHdrCred1",
+          "name": "Gemini - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gemini_url }}/models/{{ $('Settings Object').first().json.settings.embedding_model }}:embedContent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Settings Object').first().json.embed_body) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "4f478a76-0582-517e-8211-d2e18fae146f",
+      "name": "Check Embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "scGeminiHdrCred1",
+          "name": "Gemini - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/kb_files?select=file_id,title,chunk_count",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "163221e4-c1a1-500f-8772-52473e7c3c73",
+      "name": "Check Knowledge Base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $('Settings Object').first().json.settings.drive_folder_id }}",
+            "mode": "id"
+          },
+          "whatToSearch": "files",
+          "fileTypes": [
+            "application/vnd.google-apps.document"
+          ],
+          "includeTrashed": false
+        },
+        "options": {}
+      },
+      "id": "e955dedd-7aed-52cb-8da4-7ffe9b77db36",
+      "name": "Check Drive Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        360
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "scGoogleSACred01",
+          "name": "Google Service Account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Settings Object').first().json.settings.sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "conversations",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "38f791ef-988d-5e88-a9b2-47c8cc829c81",
+      "name": "Check Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1980,
+        360
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "scGoogleSACred01",
+          "name": "Google Service Account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect Results: one PASS/FAIL line per check, posted to Slack and returned.\nconst results = [];\nconst add = (name, ok, detail) => results.push({ check: name, result: ok ? 'PASS' : 'FAIL', detail: String(detail ?? '').slice(0, 300) });\nconst get = (node) => ($(node).isExecuted ? $(node).all().map((i) => i.json) : null);\nconst errOf = (rows) => {\n  const e = rows && rows.find((r) => r && r.error);\n  return e ? (e.error.message || e.error.description || JSON.stringify(e.error)).slice(0, 300) : null;\n};\n\n// 1. Settings\nconst settingsRows = get('Read Settings') || [];\nconst settingsErr = errOf(settingsRows);\nconst S = Object.fromEntries(settingsRows.filter((r) => r && r.key).map((r) => [r.key, r.value]));\nconst placeholders = ['team_email', 'from_email', 'sheet_id', 'drive_folder_id']\n  .filter((k) => !S[k] || /example\\.com|^YOUR_/i.test(S[k]));\nconst required = ['system_prompt', 'model', 'min_similarity', 'slack_channel', 'fallback_text'].filter((k) => !S[k]);\nif (settingsErr) add('1. Settings table', false, settingsErr);\nelse add('1. Settings table', !placeholders.length && !required.length,\n  placeholders.length || required.length\n    ? `Still to set: ${[...required, ...placeholders].join(', ')}`\n    : `${Object.keys(S).length} settings, prompt version ${S.prompt_version}`);\n\n// 2. Database functions\nconst reg = (get('Check Functions') || [])[0] || {};\nadd('2. Database functions', !reg.error && reg.allowed === true,\n  reg.error ? errOf([reg]) : `register_message answered (history ${Array.isArray(reg.history) ? reg.history.length : '?'} messages)`);\n\n// 3. Model\nconst mod = (get('Check Model') || [])[0] || {};\nlet modelOk = false;\nlet modelDetail = '';\nif (mod.error) modelDetail = errOf([mod]);\nelse {\n  let txt = null;\n  const cand = (mod.candidates || [])[0];\n  if (cand && cand.content) txt = (cand.content.parts || []).map((c) => c.text || '').join('');\n  for (const it of mod.output || []) for (const c of it.content || []) if (c.type === 'output_text') txt = c.text;\n  try { modelOk = JSON.parse(txt).ok === true; } catch (e) { modelOk = false; }\n  modelDetail = modelOk ? `${mod.modelVersion || mod.model || S.model} returned valid structured output` : `Unexpected output: ${String(txt).slice(0, 120)}`;\n}\nadd('3. Model and structured output', modelOk, modelDetail);\n\n// 4. Embeddings\nconst emb = (get('Check Embeddings') || [])[0] || {};\nconst expected = ($('Settings Object').first().json || {}).expected_dims || 1536;\nconst vec = (emb.embedding && emb.embedding.values) || (emb.data && emb.data[0] && emb.data[0].embedding) || [];\nadd('4. Embeddings', !emb.error && vec.length === expected,\n  emb.error ? errOf([emb]) : vec.length === expected ? `${vec.length} dimensions` : `${vec.length} dimensions, table expects ${expected}`);\n\n// 5. Knowledge base\nconst kb = (get('Check Knowledge Base') || []).filter((r) => r && r.file_id);\nconst kbErr = errOf(get('Check Knowledge Base'));\nconst chunks = kb.reduce((a, r) => a + (r.chunk_count || 0), 0);\nadd('5. Knowledge base loaded', !kbErr && kb.length > 0 && chunks > 0,\n  kbErr || (kb.length ? `${kb.length} articles, ${chunks} chunks` : 'Empty: run 40 - Sync Knowledge Base'));\n\n// 6. Drive folder\nconst drive = (get('Check Drive Folder') || []).filter((r) => r && r.id);\nconst driveErr = errOf(get('Check Drive Folder'));\nadd('6. Google Drive folder', !driveErr && drive.length > 0, driveErr || `${drive.length} Google Docs in the folder`);\n\n// 7. Sheet\nconst sheet = (get('Check Sheet') || [])[0] || {};\nadd('7. Google Sheets log', !sheet.error, sheet.error ? errOf([sheet]) : 'conversations tab readable');\n\nconst passed = results.filter((r) => r.result === 'PASS').length;\nconst lines = results.map((r) => `${r.result === 'PASS' ? 'PASS' : 'FAIL'}  ${r.check}: ${r.detail}`);\nconst headline = passed === results.length ? `Setup check: all ${results.length} checks passed` : `Setup check: ${passed} of ${results.length} passed`;\nreturn [{ json: { headline, passed, total: results.length, results, slack_text: `*${headline}*\\n${lines.join('\\n')}\\n(Slack posting works if you can read this.)` } }];\n"
+      },
+      "id": "0647af1e-12a5-56e9-8c51-41aa6f7617bc",
+      "name": "Collect Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Settings Object').first().json.settings.slack_channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "mrkdwn": true
+        }
+      },
+      "id": "366b8150-6643-5cb3-a0e3-4d878fe2e883",
+      "name": "Post Results",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2420,
+        360
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "scSlackCred00001",
+          "name": "Slack Bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Run Check": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Read Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Settings": {
+      "main": [
+        [
+          {
+            "node": "Settings Object",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Object": {
+      "main": [
+        [
+          {
+            "node": "Check Functions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Functions": {
+      "main": [
+        [
+          {
+            "node": "Check Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Model": {
+      "main": [
+        [
+          {
+            "node": "Check Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Check Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Check Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "Check Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sheet": {
+      "main": [
+        [
+          {
+            "node": "Collect Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Results": {
+      "main": [
+        [
+          {
+            "node": "Post Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "scErrorAlerts000"
+  },
+  "versionId": "2c2e3785-95f6-5fcd-b54b-3cfa87f7dbe2",
+  "id": "scSetupCheck0000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

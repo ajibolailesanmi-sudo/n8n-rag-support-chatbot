@@ -1,0 +1,1029 @@
+{
+  "name": "40 - Sync Knowledge Base",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 40 - Sync Knowledge Base\nReads the Google Drive folder of help articles (Google Docs). New or edited articles are exported as Markdown, split into chunks, embedded with Gemini and stored in Supabase; articles removed from the folder are deleted. Run it from the editor or from the sync form.",
+        "height": 180,
+        "width": 600,
+        "color": 4
+      },
+      "id": "fcc01ec0-ad2e-56b2-9701-868dc5f9fc74",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b5a4bcd3-20b3-5b2e-9d6a-90af419fe3c5",
+      "name": "Run Sync",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "be6407fe-69e1-56eb-b8cc-4cc56da05af5",
+              "name": "force_full",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "3a5ec07e-29b3-595c-b7f4-cadfc5412b54",
+      "name": "Run Options",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Sync the help centre",
+        "formDescription": "Re-reads the Google Drive folder of help articles and updates what the chat assistant knows. Only new or edited articles are re-embedded.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Re-embed every article?",
+              "fieldName": "reembed_all",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "No"
+                  },
+                  {
+                    "option": "Yes"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "path": "kb-sync",
+          "buttonLabel": "Sync now",
+          "appendAttribution": false
+        }
+      },
+      "id": "aeccb6c7-71b7-570f-b4e8-41a164421a30",
+      "name": "Sync Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        460
+      ],
+      "webhookId": "344c2226-9485-595c-a966-516dd2c608d6"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8624b211-d190-58d4-b604-71495f71b223",
+              "name": "supabase_url",
+              "value": "https://YOUR-PROJECT.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "c62ef946-be5e-54a1-a1f8-e0a6ac659d67",
+              "name": "gemini_url",
+              "value": "https://generativelanguage.googleapis.com/v1beta",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "3b6c2015-cd87-52aa-937c-251f3272c738",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.supabase_url }}/rest/v1/bot_settings?select=key,value",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "87428fb7-4abf-5b35-86b8-29f105c5a99f",
+      "name": "Get Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Settings: turns the bot_settings rows into one object and checks the Drive folder is set.\nconst rows = $input.all().map((i) => i.json).filter((j) => j && j.key);\nconst settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));\nconst folder = String(settings.drive_folder_id || '');\nif (!folder || folder.startsWith('YOUR_')) {\n  throw new Error('Set drive_folder_id in the bot_settings table to the ID of the Google Drive folder with the help articles.');\n}\nconst force = $('Sync Form').isExecuted\n  ? String(($('Sync Form').first().json || {}).reembed_all || '').toLowerCase() === 'yes'\n  : !!$('Run Options').first().json.force_full;\nreturn [{ json: { settings, drive_folder_id: folder, slack_channel: settings.slack_channel || null, force } }];\n"
+      },
+      "id": "3fb22455-6b3b-5161-9037-7a738669bea8",
+      "name": "Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.drive_folder_id }}",
+            "mode": "id"
+          },
+          "whatToSearch": "files",
+          "fileTypes": [
+            "application/vnd.google-apps.document"
+          ],
+          "includeTrashed": false
+        },
+        "options": {
+          "fields": [
+            "*"
+          ]
+        }
+      },
+      "id": "753c4929-57ca-537a-b62e-30139c36e9f8",
+      "name": "List Articles",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1100,
+        360
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "scGoogleSACred01",
+          "name": "Google Service Account"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/kb_files?select=*",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "dae93d1c-4781-5f0c-8f6c-dba804f27d10",
+      "name": "Get Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Plan Sync: compares the Drive folder with the kb_files index.\n// New or edited articles are re-embedded; articles removed from the folder are deleted.\nconst cfg = $('Settings').first().json;\nconst files = $('List Articles').all().map((i) => i.json).filter((j) => j && j.id && j.name);\nconst index = $('Get Index').all().map((i) => i.json).filter((j) => j && j.file_id);\nconst byId = Object.fromEntries(index.map((r) => [r.file_id, r]));\nconst sameTime = (a, b) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();\n\nconst upserts = [];\nlet unchanged = 0;\nfor (const f of files) {\n  const known = byId[f.id];\n  const changed = cfg.force || !known || !sameTime(known.modified_time, f.modifiedTime) || known.title !== f.name;\n  if (changed) {\n    upserts.push({\n      file_id: f.id,\n      title: f.name,\n      url: f.webViewLink || `https://docs.google.com/document/d/${f.id}/edit`,\n      modified_time: f.modifiedTime || null,\n      is_new: !known,\n    });\n  } else {\n    unchanged += 1;\n  }\n}\n\nconst inFolder = new Set(files.map((f) => f.id));\nconst deletes = index.filter((r) => !inFolder.has(r.file_id)).map((r) => ({ file_id: r.file_id, title: r.title }));\nconst quoted = (ids) => `(${ids.map((id) => `\"${String(id).replace(/\"/g, '')}\"`).join(',')})`;\n\nreturn [{\n  json: {\n    upserts,\n    deletes,\n    delete_filter: deletes.length ? encodeURIComponent(quoted(deletes.map((d) => d.file_id))) : null,\n    unchanged,\n    article_count: files.length,\n    forced: !!cfg.force,\n  },\n}];\n"
+      },
+      "id": "6a1a88d7-b17c-54d8-90ff-fe5a884cdde6",
+      "name": "Plan Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b7d17040-f005-5408-89a2-bd083e4e5f59",
+              "leftValue": "={{ $json.deletes.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8526a702-17df-5741-a654-bcdbd42f08bc",
+      "name": "Any Removed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/documents?file_id=in.{{ $json.delete_filter }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "9be93ce0-599d-5fa9-a909-c7f383d6d21c",
+      "name": "Delete Removed Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        260
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/kb_files?file_id=in.{{ $('Plan Sync').first().json.delete_filter }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "e6f354b0-4ccf-5c88-b88f-4cd810dce220",
+      "name": "Delete Removed Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        260
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1f5b936a-40bb-5125-aab5-1c8c60facb67",
+              "leftValue": "={{ $('Plan Sync').first().json.upserts.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "213c025d-655f-595b-b239-900442f943ce",
+      "name": "Any Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Upsert Items: one item per article to (re)embed.\nreturn $('Plan Sync').first().json.upserts.map((u) => ({ json: u }));\n"
+      },
+      "id": "681d7162-8b36-5d19-ae23-e018754465a2",
+      "name": "Upsert Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.file_id }}",
+          "mode": "id"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/markdown"
+            }
+          }
+        }
+      },
+      "id": "614ce1e7-74ea-58fe-9884-3acfd4af53fa",
+      "name": "Download Article",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2860,
+        260
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "scGoogleSACred01",
+          "name": "Google Service Account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Article: reads each exported Google Doc (Markdown), tidies it and fingerprints it.\nconst metas = $('Upsert Items').all().map((i) => i.json);\nconst items = $input.all();\n\n// FNV-1a, 32-bit, twice with different seeds: enough to tell whether an article changed.\nfunction fnv(str, seed) {\n  let h = seed >>> 0;\n  for (let i = 0; i < str.length; i++) {\n    h ^= str.charCodeAt(i);\n    h = Math.imul(h, 16777619) >>> 0;\n  }\n  return h.toString(16).padStart(8, '0');\n}\n\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const meta = metas[i] || {};\n  let text = '';\n  try {\n    const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n    text = buf.toString('utf8');\n  } catch (e) {\n    text = '';\n  }\n  // Google's Markdown export escapes characters (\\$65) and bolds headings (# **Title**).\n  text = text\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/\\\\([\\\\`*_{}\\[\\]()#+\\-.!$|>~])/g, '$1')\n    .replace(/\\*\\*(.+?)\\*\\*/g, '$1')\n    .replace(/\\n\\n(\\* |\\d+\\. )/g, '\\n$1')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n  if (!text) continue;\n  const fingerprint = fnv(`${meta.title}\\n${text}`, 2166136261) + fnv(text, 33554467);\n  out.push({ json: { ...meta, text, hash: fingerprint, chars: text.length } });\n}\nreturn out;\n"
+      },
+      "id": "6c996658-55ab-527a-8101-0a3f10d1ef10",
+      "name": "Prepare Article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/documents?file_id=eq.{{ encodeURIComponent($json.file_id) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "id": "d7c953f4-9f94-56b1-b67f-b1a7b1d69cc1",
+      "name": "Remove Old Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        260
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chunk Articles: splits each article into chunks of about chunk_size characters, breaking at\n// headings first, then paragraphs, then lines, with an overlap so a fact split across two chunks\n// is still found. Builds the batch embedding request for Gemini (one request per article).\nconst settings = $('Settings').first().json.settings || {};\nconst CHUNK = parseInt(settings.chunk_size, 10) || 900;\nconst OVERLAP = parseInt(settings.chunk_overlap, 10) || 120;\nconst DIMS = parseInt(settings.embedding_dimensions, 10) || 1536;\nconst MODEL = settings.embedding_model || 'gemini-embedding-001';\n\nfunction splitRecursive(text, separators) {\n  if (text.length <= CHUNK) return [text];\n  const [sep, ...rest] = separators;\n  if (sep === undefined) {\n    const out = [];\n    for (let i = 0; i < text.length; i += CHUNK) out.push(text.slice(i, i + CHUNK));\n    return out;\n  }\n  const pieces = text.split(sep).map((s, i) => (i === 0 ? s : sep + s)).filter((s) => s.trim());\n  const out = [];\n  let current = '';\n  for (const piece of pieces) {\n    const candidate = current ? current + piece : piece;\n    if (candidate.length <= CHUNK) {\n      current = candidate;\n      continue;\n    }\n    if (current) out.push(current);\n    if (piece.length > CHUNK) {\n      const sub = splitRecursive(piece, rest);\n      out.push(...sub.slice(0, -1));\n      current = sub[sub.length - 1];\n    } else {\n      current = piece;\n    }\n  }\n  if (current) out.push(current);\n  return out;\n}\n\nfunction withOverlap(chunks) {\n  return chunks.map((c, i) => {\n    if (i === 0 || OVERLAP <= 0) return c.trim();\n    const prev = chunks[i - 1];\n    const tail = prev.slice(Math.max(0, prev.length - OVERLAP));\n    const cut = tail.search(/\\s/);\n    return ((cut >= 0 ? tail.slice(cut + 1) : tail) + '\\n' + c).trim();\n  });\n}\n\n// Remove Old Chunks outputs the delete responses, so the articles are read from Prepare Article.\nconst out = [];\nfor (const item of $('Prepare Article').all()) {\n  const a = item.json;\n  const pieces = withOverlap(splitRecursive(a.text, ['\\n## ', '\\n### ', '\\n\\n', '\\n', ' ']));\n  const chunks = pieces.filter((c) => c.length > 20);\n  out.push({\n    json: {\n      ...a,\n      chunks,\n      embed_body: {\n        requests: chunks.map((c) => ({\n          model: `models/${MODEL}`,\n          content: { parts: [{ text: `${a.title}\\n${c}` }] },\n          taskType: 'RETRIEVAL_DOCUMENT',\n          title: a.title,\n          outputDimensionality: DIMS,\n        })),\n      },\n    },\n  });\n}\nreturn out;\n"
+      },
+      "id": "2425cdbc-2471-57af-8466-e1750956ef59",
+      "name": "Chunk Articles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gemini_url }}/models/{{ $('Settings').first().json.settings.embedding_model }}:batchEmbedContents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.embed_body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "036aaf50-5a1f-5e70-b0c0-4475b0d11268",
+      "name": "Embed Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        260
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "scGeminiHdrCred1",
+          "name": "Gemini - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Rows: pairs each chunk with its embedding and prepares the rows for the documents table.\nconst articles = $('Chunk Articles').all().map((i) => i.json);\nconst out = [];\nfor (let i = 0; i < $input.all().length; i++) {\n  const res = $input.all()[i].json || {};\n  const a = articles[i];\n  const embeddings = Array.isArray(res.embeddings) ? res.embeddings : [];\n  if (!a) throw new Error(`No article for embedding result ${i}`);\n  if (embeddings.length !== a.chunks.length) {\n    throw new Error(`\"${a.title}\": ${a.chunks.length} chunks but ${embeddings.length} embeddings came back`);\n  }\n  const rows = a.chunks.map((content, idx) => ({\n    content,\n    metadata: { file_id: a.file_id, title: a.title, url: a.url, content_hash: a.hash, chunk_index: idx },\n    embedding: embeddings[idx].values,\n  }));\n  out.push({ json: { file_id: a.file_id, title: a.title, url: a.url, modified_time: a.modified_time, hash: a.hash, rows, chunk_count: rows.length } });\n}\nreturn out;\n"
+      },
+      "id": "b34fad39-863b-5c3e-833d-dba8d740f872",
+      "name": "Build Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {}
+      },
+      "id": "17ffe8b4-2ae1-563a-921c-b5085633f9fc",
+      "name": "Store Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        260
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count Chunks: one kb_files row per embedded article, with its chunk count.\nconst now = new Date().toISOString();\nconst rows = $('Build Rows').all().map((i) => i.json).map((a) => ({\n  file_id: a.file_id,\n  title: a.title,\n  url: a.url,\n  modified_time: a.modified_time,\n  content_hash: a.hash,\n  chunk_count: a.chunk_count,\n  synced_at: now,\n}));\nreturn [{ json: { rows, chunks_written: rows.reduce((sum, r) => sum + r.chunk_count, 0) } }];\n"
+      },
+      "id": "a0b3a250-4230-5999-a8b7-507bbd98e813",
+      "name": "Count Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/kb_files?on_conflict=file_id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {}
+      },
+      "id": "cbf945ce-f100-5460-b04c-c626f846d811",
+      "name": "Update Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        260
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summary: what the sync did, for Slack and for the form's result page.\nconst plan = $('Plan Sync').first().json;\nconst counted = $('Count Chunks').isExecuted ? $('Count Chunks').first().json : { rows: [], chunks_written: 0 };\nconst added = plan.upserts.filter((u) => u.is_new).map((u) => u.title);\nconst updated = plan.upserts.filter((u) => !u.is_new).map((u) => u.title);\nconst removed = plan.deletes.map((d) => d.title);\nconst embedded = counted.rows.map((r) => r.title);\nconst skipped = plan.upserts.map((u) => u.title).filter((t) => !embedded.includes(t));\n\nconst parts = [];\nif (added.length) parts.push(`${added.length} new`);\nif (updated.length) parts.push(`${updated.length} updated`);\nif (removed.length) parts.push(`${removed.length} removed`);\nconst headline = parts.length ? `Knowledge base synced: ${parts.join(', ')}.` : 'Knowledge base checked: no changes.';\n\nconst detail = [\n  added.length ? `New: ${added.join('; ')}` : null,\n  updated.length ? `Updated: ${updated.join('; ')}` : null,\n  removed.length ? `Removed: ${removed.join('; ')}` : null,\n  skipped.length ? `Skipped (empty document): ${skipped.join('; ')}` : null,\n  `${plan.article_count} articles in the folder, ${counted.chunks_written} chunks written this run${plan.forced ? ' (full re-embed)' : ''}.`,\n].filter(Boolean);\n\nreturn [{\n  json: {\n    headline,\n    detail: detail.join('\\n'),\n    slack_text: `*${headline}*\\n${detail.join('\\n')}`,\n    changed: parts.length > 0,\n    article_count: plan.article_count,\n    chunks_written: counted.chunks_written,\n  },\n}];\n"
+      },
+      "id": "f3c32e69-71dd-5068-ab0f-1fade64e20c7",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Settings').first().json.slack_channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "mrkdwn": true
+        }
+      },
+      "id": "e64e18ca-8e93-59bf-b2ed-044e02b32c7c",
+      "name": "Post Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        5060,
+        360
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "scSlackCred00001",
+          "name": "Slack Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b5cefd5-408e-55c5-a19c-66c76460eecd",
+              "leftValue": "={{ $('Sync Form').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "14d16bd3-757b-5f22-bb61-810204847bec",
+      "name": "From Form?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5280,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "={{ $('Summary').first().json.headline }}",
+        "completionMessage": "={{ $('Summary').first().json.detail }}",
+        "options": {}
+      },
+      "id": "f444adab-fc1b-5942-ab85-0b638c9c03f0",
+      "name": "Show Result",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "position": [
+        5500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Run Sync": {
+      "main": [
+        [
+          {
+            "node": "Run Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Options": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Form": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "List Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Articles": {
+      "main": [
+        [
+          {
+            "node": "Get Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Index": {
+      "main": [
+        [
+          {
+            "node": "Plan Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Sync": {
+      "main": [
+        [
+          {
+            "node": "Any Removed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Removed?": {
+      "main": [
+        [
+          {
+            "node": "Delete Removed Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Any Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Removed Chunks": {
+      "main": [
+        [
+          {
+            "node": "Delete Removed Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Removed Index": {
+      "main": [
+        [
+          {
+            "node": "Any Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Changed?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Items": {
+      "main": [
+        [
+          {
+            "node": "Download Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Article": {
+      "main": [
+        [
+          {
+            "node": "Prepare Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Article": {
+      "main": [
+        [
+          {
+            "node": "Remove Old Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Old Chunks": {
+      "main": [
+        [
+          {
+            "node": "Chunk Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Articles": {
+      "main": [
+        [
+          {
+            "node": "Embed Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Chunks": {
+      "main": [
+        [
+          {
+            "node": "Build Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Rows": {
+      "main": [
+        [
+          {
+            "node": "Store Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Chunks": {
+      "main": [
+        [
+          {
+            "node": "Count Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Chunks": {
+      "main": [
+        [
+          {
+            "node": "Update Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Index": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        [
+          {
+            "node": "Post Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Summary": {
+      "main": [
+        [
+          {
+            "node": "From Form?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Form?": {
+      "main": [
+        [
+          {
+            "node": "Show Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "scErrorAlerts000"
+  },
+  "versionId": "a0e61a73-769f-5eb4-a5a8-5664a79c643b",
+  "id": "scSyncKnowledge0",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

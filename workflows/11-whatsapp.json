@@ -1,0 +1,420 @@
+{
+  "name": "11 - WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 11 - WhatsApp\nMeta signs every webhook; n8n checks the signature with the app secret. Each text message goes to 20 - Answer Message and the reply is sent back on WhatsApp. Redelivered messages are ignored, and voice notes or images get a short text-only notice.",
+        "height": 180,
+        "width": 560,
+        "color": 4
+      },
+      "id": "26672741-d3f7-56a8-a290-cb05baff4e3a",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {
+          "messageStatusUpdates": []
+        }
+      },
+      "id": "2bfe595c-cf7f-5e24-ac5b-ae986f471c49",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "scWaTriggerCred1",
+          "name": "WhatsApp OAuth - Support Chatbot"
+        }
+      },
+      "webhookId": "43f7f06b-ccdd-5692-93de-ecd4f12b7fc6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split Messages: one item per incoming WhatsApp message. Status updates are ignored.\n// Text messages go to the assistant; other types (voice notes, images) get a short reply.\nconst out = [];\nfor (const item of $input.all()) {\n  const ev = item.json || {};\n  const phoneNumberId = ev.metadata && ev.metadata.phone_number_id;\n  const contacts = Array.isArray(ev.contacts) ? ev.contacts : [];\n  for (const msg of ev.messages || []) {\n    const contact = contacts.find((c) => c.wa_id === msg.from) || contacts[0] || {};\n    out.push({\n      json: {\n        kind: msg.type === 'text' ? 'text' : 'other',\n        message_type: msg.type,\n        channel: 'whatsapp',\n        session_id: `wa:${msg.from}`,\n        text: msg.type === 'text' ? String((msg.text && msg.text.body) || '') : '',\n        contact_phone: `+${msg.from}`,\n        recipient: msg.from,\n        contact_name: (contact.profile && contact.profile.name) || null,\n        external_id: msg.id || null,\n        phone_number_id: phoneNumberId || null,\n        is_test: false,\n        dry_run: false,\n      },\n    });\n  }\n}\nreturn out;\n"
+      },
+      "id": "0df27628-5cc5-569e-91d4-e8903d8ae783",
+      "name": "Split Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "139bb9b6-0dfa-5dd7-9650-412d7af1aca8",
+      "name": "Loop Messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3b199898-b1bb-5e4a-a27a-628ca704e193",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        660,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c414f282-93aa-56b2-a238-93e248029e60",
+              "leftValue": "={{ $json.kind === 'text' && String($json.text || '').trim().length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "55f32376-8784-5926-a7a4-f20865b6d60a",
+      "name": "Text Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "scAnswerMessage0",
+          "mode": "list",
+          "cachedResultName": "20 - Answer Message",
+          "cachedResultUrl": "/workflow/scAnswerMessage0"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "1fc105c3-26cc-52e4-bcae-bcb4be0b2e5d",
+      "name": "Answer",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "052eae20-fbb6-5c4d-8036-75664c27cfa8",
+              "leftValue": "={{ $json.skip === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7cc994bc-aea2-5d2a-b56f-fb5c0ecd4442",
+      "name": "Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $('Loop Messages').first().json.phone_number_id }}",
+        "recipientPhoneNumber": "={{ $('Loop Messages').first().json.recipient }}",
+        "messageType": "text",
+        "textBody": "={{ $json.reply }}",
+        "additionalFields": {}
+      },
+      "id": "6c093e40-b401-5c4b-8784-64590f85297d",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "scWaApiCred00001",
+          "name": "WhatsApp API - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $('Loop Messages').first().json.phone_number_id }}",
+        "recipientPhoneNumber": "={{ $('Loop Messages').first().json.recipient }}",
+        "messageType": "text",
+        "textBody": "Sorry, I'm having trouble answering right now. Please try again in a few minutes.",
+        "additionalFields": {}
+      },
+      "id": "61d8579a-db28-586b-a74e-d5882ec024f7",
+      "name": "Send Fallback",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        460
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "scWaApiCred00001",
+          "name": "WhatsApp API - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "={{ $('Loop Messages').first().json.phone_number_id }}",
+        "recipientPhoneNumber": "={{ $('Loop Messages').first().json.recipient }}",
+        "messageType": "text",
+        "textBody": "I can only read text messages at the moment. Please type your question.",
+        "additionalFields": {}
+      },
+      "id": "241cf16d-05a5-584f-9e81-3eef847e380e",
+      "name": "Send Text-Only Notice",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        560
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "scWaApiCred00001",
+          "name": "WhatsApp API - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Split Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Messages": {
+      "main": [
+        [
+          {
+            "node": "Loop Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Messages": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Text Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Message?": {
+      "main": [
+        [
+          {
+            "node": "Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Text-Only Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer": {
+      "main": [
+        [
+          {
+            "node": "Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip?": {
+      "main": [
+        [
+          {
+            "node": "Loop Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply": {
+      "main": [
+        [
+          {
+            "node": "Loop Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Fallback": {
+      "main": [
+        [
+          {
+            "node": "Loop Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Text-Only Notice": {
+      "main": [
+        [
+          {
+            "node": "Loop Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "scErrorAlerts000"
+  },
+  "versionId": "ba69b0e8-a3fd-5301-a035-e558e0bf65a3",
+  "id": "scWhatsApp000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,1243 @@
+{
+  "name": "20 - Answer Message",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 20 - Answer Message\nShared by the website chat, WhatsApp and the test runner.\n1. Register the message: caps, memory and settings in one call.\n2. Search the help articles twice (the message, and with the previous message).\n3. Ask the model (Gemini) for a structured answer that cites its sources.\n4. Check the answer is grounded and apply the escalation rules.\n5. Log the reply, hand off to the team if needed, update the sheet.",
+        "height": 260,
+        "width": 560,
+        "color": 4
+      },
+      "id": "5fba761c-06b1-5bfc-9506-1421141bf94b",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "b798ee8a-070d-5bf2-982f-820d380695f7",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8624b211-d190-58d4-b604-71495f71b223",
+              "name": "supabase_url",
+              "value": "https://YOUR-PROJECT.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "c62ef946-be5e-54a1-a1f8-e0a6ac659d67",
+              "name": "gemini_url",
+              "value": "https://generativelanguage.googleapis.com/v1beta",
+              "type": "string"
+            },
+            {
+              "id": "dd91d80c-2253-511e-bbfd-5f09c343046d",
+              "name": "n8n_url",
+              "value": "https://YOUR-INSTANCE.app.n8n.cloud",
+              "type": "string"
+            },
+            {
+              "id": "e7b8a680-fee8-586c-80d8-8aaa30874a65",
+              "name": "started_ms",
+              "value": "={{ Date.now() }}",
+              "type": "number"
+            },
+            {
+              "id": "85adeb78-4b4c-50ea-a0cf-29a6283fe095",
+              "name": "store_down_text",
+              "value": "Sorry, I can't answer right now. Please try again in a few minutes, or contact the help desk through the client portal.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "d145141d-582f-514c-8106-3dc0b43cad63",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url }}/rest/v1/rpc/register_message",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_session_id: $json.session_id, p_channel: $json.channel, p_text: String($json.text || '').slice(0, 2000), p_is_test: !!$json.is_test, p_contact_phone: $json.contact_phone || null, p_contact_name: $json.contact_name || null, p_external_id: $json.external_id || null }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e9684b0a-4dda-5036-a66a-eaa25c63b13c",
+      "name": "Register Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Turn: reads the register_message result and decides the route for this message.\n// Routes: answer (normal), limit (a message cap was reached), duplicate (WhatsApp redelivery).\nconst reg = $input.first().json;\nconst input = $('Config').first().json;\nconst settings = reg.settings || {};\n\nconst num = (key, fallback) => {\n  const v = parseFloat(settings[key]);\n  return Number.isFinite(v) ? v : fallback;\n};\n\nlet route = 'answer';\nif (reg.duplicate) route = 'duplicate';\nelse if (!reg.allowed) route = 'limit';\n\nreturn [{\n  json: {\n    route,\n    limit_reason: reg.limit_reason || null,\n    input: {\n      channel: input.channel,\n      session_id: input.session_id,\n      text: String(input.text || '').trim().slice(0, 2000),\n      is_test: !!input.is_test,\n      dry_run: !!input.dry_run,\n      phone_number_id: input.phone_number_id || null,\n    },\n    settings,\n    num: {\n      top_k: num('top_k', 4),\n      max_sources: num('max_sources', 5),\n      min_similarity: num('min_similarity', 0.3),\n      max_output_tokens: num('max_output_tokens', 1200),\n      max_contact_asks: num('max_contact_asks', 2),\n    },\n    conversation: reg.conversation || {},\n    history: Array.isArray(reg.history) ? reg.history : [],\n    previous_user_message: reg.previous_user_message || null,\n  },\n}];\n"
+      },
+      "id": "836cd772-c4c8-581a-8ea4-24f4eeb1a47e",
+      "name": "Prepare Turn",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "86672443-6ef1-5c7b-90c1-3d5dfc885590",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "answer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "answer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "56ea2d76-d9d5-5e05-a599-3cb7d08c0046",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "limit",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "limit"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "63109473-9924-5ed1-b9c6-d548e0541e99",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "duplicate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "duplicate"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "befd3ff2-c1f3-5167-9c0e-517b0046b335",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Search Queries: one search for the message itself, and one that adds the previous customer\n// message so follow-ups like \"does it include weekends?\" still find the right article.\n// Each item carries the embedding request for Gemini's embedContent endpoint.\nconst p = $('Prepare Turn').first().json;\nconst S = p.settings;\nconst dims = parseInt(S.embedding_dimensions, 10) || 1536;\nconst text = p.input.text;\n\nconst item = (query, kind) => ({\n  json: {\n    query,\n    kind,\n    embed_body: {\n      content: { parts: [{ text: query }] },\n      taskType: 'RETRIEVAL_QUERY',\n      outputDimensionality: dims,\n    },\n  },\n});\n\nconst queries = [item(text, 'message')];\nconst prev = (p.previous_user_message || '').trim();\nif (prev && prev !== text) {\n  queries.push(item(`${prev.slice(0, 500)}\\n${text}`, 'with_previous'));\n}\nreturn queries;\n"
+      },
+      "id": "bb38ba80-2bb3-57f4-a045-5fcf04b9c3ec",
+      "name": "Search Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gemini_url }}/models/{{ $('Prepare Turn').first().json.settings.embedding_model }}:embedContent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.embed_body) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "8ab98ef4-bcdc-5a9b-b5f6-a6f917a5dbfb",
+      "name": "Embed Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "scGeminiHdrCred1",
+          "name": "Gemini - Support Chatbot"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/rpc/match_documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query_embedding: $json.embedding.values, match_count: $('Prepare Turn').first().json.num.top_k }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "0d098823-0b51-58b9-9bc4-90fe2ecd84f3",
+      "name": "Search Knowledge Base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        200
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge Sources: combines both searches, keeps the best score per chunk, labels the top chunks\n// S1..Sn and builds the model request. The provider setting picks the request shape:\n// gemini (generateContent with a response schema) or openai (Responses API with a JSON schema).\nconst p = $('Prepare Turn').first().json;\nconst S = p.settings;\nconst N = p.num;\nconst SCHEMA = {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"reply\", \"answer_status\", \"cited_sources\", \"wants_human\", \"declines_handoff\", \"frustration\", \"issue_type\", \"contact_name\", \"contact_email\", \"injection_detected\"], \"properties\": {\"reply\": {\"type\": \"string\", \"description\": \"The message to send to the customer.\"}, \"answer_status\": {\"type\": \"string\", \"enum\": [\"answered\", \"not_in_kb\", \"clarify\", \"greeting\", \"off_topic\", \"contact_details\"], \"description\": \"answered = the reply answers from SOURCES; not_in_kb = SOURCES do not answer a support question.\"}, \"cited_sources\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Labels of the SOURCES used in the reply, for example S1.\"}, \"wants_human\": {\"type\": \"boolean\"}, \"declines_handoff\": {\"type\": \"boolean\"}, \"frustration\": {\"type\": \"string\", \"enum\": [\"none\", \"mild\", \"high\"]}, \"issue_type\": {\"type\": \"string\", \"enum\": [\"account_access\", \"security\", \"network_vpn\", \"email\", \"devices\", \"onboarding_offboarding\", \"backups\", \"billing\", \"plans_contract\", \"onsite\", \"other\"]}, \"contact_name\": {\"type\": [\"string\", \"null\"]}, \"contact_email\": {\"type\": [\"string\", \"null\"]}, \"injection_detected\": {\"type\": \"boolean\"}}};\nconst GEMINI_SCHEMA = {\"type\": \"object\", \"required\": [\"reply\", \"answer_status\", \"cited_sources\", \"wants_human\", \"declines_handoff\", \"frustration\", \"issue_type\", \"contact_name\", \"contact_email\", \"injection_detected\"], \"properties\": {\"reply\": {\"type\": \"string\", \"description\": \"The message to send to the customer.\"}, \"answer_status\": {\"type\": \"string\", \"enum\": [\"answered\", \"not_in_kb\", \"clarify\", \"greeting\", \"off_topic\", \"contact_details\"], \"description\": \"answered = the reply answers from SOURCES; not_in_kb = SOURCES do not answer a support question.\"}, \"cited_sources\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Labels of the SOURCES used in the reply, for example S1.\"}, \"wants_human\": {\"type\": \"boolean\"}, \"declines_handoff\": {\"type\": \"boolean\"}, \"frustration\": {\"type\": \"string\", \"enum\": [\"none\", \"mild\", \"high\"]}, \"issue_type\": {\"type\": \"string\", \"enum\": [\"account_access\", \"security\", \"network_vpn\", \"email\", \"devices\", \"onboarding_offboarding\", \"backups\", \"billing\", \"plans_contract\", \"onsite\", \"other\"]}, \"contact_name\": {\"type\": \"string\", \"nullable\": true}, \"contact_email\": {\"type\": \"string\", \"nullable\": true}, \"injection_detected\": {\"type\": \"boolean\"}}};\n\n// Rows come from the match_documents function: { id, content, metadata, similarity }.\nconst rows = $input.all()\n  .map((i) => i.json)\n  .filter((j) => j && typeof j.content === 'string' && j.content.length);\n\n// match_documents returns its top matches whenever the knowledge base has content, so no rows at all\n// means the knowledge base is empty. The next node routes this to the fallback reply and an alert.\nif (!rows.length) {\n  return [{ json: { search_failed: true, error: { message: 'Knowledge base search returned no rows: the knowledge base is empty or the search failed.' } } }];\n}\n\nconst best = new Map();\nfor (const r of rows) {\n  const md = r.metadata || {};\n  const key = `${md.file_id || md.title || ''}|${r.content.slice(0, 200)}`;\n  const seen = best.get(key);\n  if (!seen || (r.similarity ?? 0) > (seen.similarity ?? 0)) best.set(key, r);\n}\n\nconst top = [...best.values()]\n  .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))\n  .slice(0, N.max_sources);\n\nconst sources = top.map((r, i) => {\n  const md = r.metadata || {};\n  return {\n    label: `S${i + 1}`,\n    title: md.title || 'Help article',\n    file_id: md.file_id || null,\n    url: md.url || null,\n    score: Math.round((r.similarity ?? 0) * 1000) / 1000,\n    text: r.content,\n  };\n});\nconst bestScore = sources.length ? sources[0].score : 0;\n\nconst sourcesBlock = sources.length\n  ? sources.map((s) => `[${s.label}] ${s.title}\\n${s.text}`).join('\\n\\n')\n  : '(No help articles matched this message.)';\n\nconst stateText = {\n  bot: 'normal conversation',\n  collecting_contact: \"waiting for the customer's name and email address so a person on the team can follow up\",\n  handed_off: 'this conversation has already been passed to a person on the team',\n}[p.conversation.status] || 'normal conversation';\n\nconst today = new Date().toISOString().slice(0, 10);\nconst system = String(S.system_prompt || '')\n  .split('{{state}}').join(stateText)\n  .split('{{today}}').join(today)\n  .split('{{channel}}').join(p.input.channel === 'whatsapp' ? 'WhatsApp' : 'website chat');\nconst sourcesMessage = `SOURCES (the only facts you may use):\\n\\n${sourcesBlock}`;\n\nconst history = p.history\n  .filter((h) => h && h.content)\n  .map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.content).slice(0, 1500) }));\n\nconst provider = String(S.provider || 'gemini').toLowerCase();\nlet body;\nif (provider === 'openai') {\n  body = {\n    model: S.model,\n    input: [\n      { role: 'system', content: system },\n      { role: 'system', content: sourcesMessage },\n      ...history,\n      { role: 'user', content: p.input.text },\n    ],\n    max_output_tokens: N.max_output_tokens,\n    text: { format: { type: 'json_schema', name: 'support_reply', strict: true, schema: SCHEMA } },\n  };\n  if (S.reasoning_effort) body.reasoning = { effort: S.reasoning_effort };\n} else {\n  // Gemini wants alternating user and model turns that start with the user.\n  const contents = [];\n  for (const h of history) {\n    const role = h.role === 'assistant' ? 'model' : 'user';\n    if (!contents.length && role === 'model') continue;\n    const last = contents[contents.length - 1];\n    if (last && last.role === role) last.parts[0].text += `\\n${h.content}`;\n    else contents.push({ role, parts: [{ text: h.content }] });\n  }\n  const last = contents[contents.length - 1];\n  if (last && last.role === 'user') last.parts[0].text += `\\n${p.input.text}`;\n  else contents.push({ role: 'user', parts: [{ text: p.input.text }] });\n  body = {\n    systemInstruction: { parts: [{ text: `${system}\\n\\n${sourcesMessage}` }] },\n    contents,\n    generationConfig: {\n      temperature: 0,\n      maxOutputTokens: N.max_output_tokens,\n      responseMimeType: 'application/json',\n      responseSchema: GEMINI_SCHEMA,\n    },\n  };\n}\n\nreturn [{\n  json: {\n    search_failed: false,\n    provider,\n    model: S.model,\n    request_body: body,\n    sources: sources.map(({ text, ...rest }) => rest),\n    sources_text: Object.fromEntries(sources.map((s) => [s.label, s.text])),\n    best_score: bestScore,\n  },\n}];\n"
+      },
+      "id": "077fa511-bb56-5550-be35-62009cb48d95",
+      "name": "Merge Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1be84a48-ec7e-5d15-b8b8-859d54190712",
+              "leftValue": "={{ $json.search_failed !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "6a428689-87c3-52cf-9a21-e8fad9fd4e01",
+      "name": "Search OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1870,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.gemini_url }}/models/{{ $json.model }}:generateContent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "8545d58e-2406-54bf-888b-fc8d956014d0",
+      "name": "Ask Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2090,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "scGeminiHdrCred1",
+          "name": "Gemini - Support Chatbot"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apply Rules: reads the model's JSON, checks that an answer is grounded in the retrieved\n// articles, applies the escalation rules from bot_settings and writes the final reply.\n// The model suggests; this node decides. Handoff replies come from editable templates.\nconst p = $('Prepare Turn').first().json;\nconst ms = $('Merge Sources').first().json;\nconst res = $input.first().json;\nconst S = p.settings;\nconst N = p.num;\nconst conv = p.conversation || {};\nconst channel = p.input.channel;\nconst text = p.input.text;\nconst flags = {};\n\n// ---------- 1. Read the model output (Gemini or OpenAI) ----------\nfunction outputText(r) {\n  if (Array.isArray(r.candidates)) {\n    const cand = r.candidates[0] || {};\n    if (cand.finishReason && cand.finishReason !== 'STOP') flags.incomplete = cand.finishReason;\n    if (r.promptFeedback && r.promptFeedback.blockReason) flags.blocked = r.promptFeedback.blockReason;\n    const parts = (cand.content && cand.content.parts) || [];\n    const texts = parts.filter((c) => typeof c.text === 'string' && !c.thought).map((c) => c.text);\n    return texts.length ? texts.join('') : null;\n  }\n  if (typeof r.output_text === 'string') return r.output_text;\n  for (const item of r.output || []) {\n    if (item.type !== 'message') continue;\n    for (const c of item.content || []) {\n      if (c.type === 'output_text' && typeof c.text === 'string') return c.text;\n      if (c.type === 'refusal') flags.model_refusal = String(c.refusal || '').slice(0, 200);\n    }\n  }\n  return null;\n}\n\nconst EMPTY = {\n  reply: '', answer_status: 'not_in_kb', cited_sources: [], wants_human: false, declines_handoff: false,\n  frustration: 'none', issue_type: 'other', contact_name: null, contact_email: null, injection_detected: false,\n};\nlet m = null;\nconst raw = outputText(res);\ntry {\n  m = raw ? JSON.parse(raw) : null;\n} catch (e) {\n  flags.parse_error = String(e.message).slice(0, 200);\n}\nif (!m || typeof m !== 'object') {\n  flags.unreadable = true;\n  m = { ...EMPTY };\n}\nif (res.status === 'incomplete') flags.incomplete = (res.incomplete_details && res.incomplete_details.reason) || 'incomplete';\nm.reply = String(m.reply || '').trim();\n\n// ---------- 2. Grounding check ----------\nconst labels = ms.sources.map((s) => s.label);\nconst citedRaw = Array.isArray(m.cited_sources) ? m.cited_sources : [];\nconst cited = [...new Set(citedRaw.filter((l) => labels.includes(l)))];\nconst badCites = citedRaw.filter((l) => !labels.includes(l));\nlet status = m.answer_status;\n\nif (status === 'answered') {\n  if (!cited.length) flags.no_citation = true;\n  if (badCites.length) flags.invalid_citation = badCites;\n  if (ms.best_score < N.min_similarity) flags.low_similarity = ms.best_score;\n  if (flags.no_citation || flags.invalid_citation || flags.low_similarity !== undefined) {\n    status = 'not_in_kb';\n    flags.grounding_override = true;\n  }\n}\n\n// Numbers in an answer should appear in the cited articles (or in the customer's own message).\nconst numberMode = String(S.number_check || 'flag').toLowerCase();\nif (status === 'answered' && numberMode !== 'off') {\n  const numbersIn = (s) => new Set((String(s).replace(/(\\d),(\\d{3})/g, '$1$2').match(/\\d+(?:\\.\\d+)?/g)) || []);\n  const allowed = numbersIn(cited.map((l) => ms.sources_text[l] || '').join(' ') + ' ' + text);\n  const replyNoLists = m.reply.replace(/^\\s*\\d+[.)]\\s/gm, '');\n  const unsupported = [...numbersIn(replyNoLists)].filter((n) => !allowed.has(n));\n  if (unsupported.length) {\n    flags.unsupported_numbers = unsupported;\n    if (numberMode === 'block') {\n      status = 'not_in_kb';\n      flags.grounding_override = true;\n    }\n  }\n}\nif (status === 'not_in_kb') flags.not_sure = true;\n\n// ---------- 3. Escalation signals ----------\nconst lower = text.toLowerCase();\nconst escapeRe = (s) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst keywords = String(S.handoff_keywords || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);\nconst keywordHit = keywords.find((k) => new RegExp(`(^|[^a-z])${escapeRe(k)}([^a-z]|$)`).test(lower)) || null;\n\nconst injection = !!m.injection_detected;\nif (injection) flags.injection = true;\n\nconst askedRule = String(S.escalate_when_asked || 'yes').toLowerCase() === 'yes';\nconst keywordCounts = keywordHit && (status !== 'answered' || text.length < 80);\nconst wantsHuman = askedRule && !injection && (m.wants_human === true || !!keywordCounts);\nif (keywordCounts && m.wants_human !== true) flags.keyword_handoff = keywordHit;\n\nconst rank = { none: 0, mild: 1, high: 2 };\nconst frustrationRule = String(S.escalate_when_frustrated || 'high').toLowerCase();\nconst threshold = frustrationRule in rank ? rank[frustrationRule] : 99;\nconst frustrated = !injection && threshold > 0 && threshold < 99 && (rank[m.frustration] || 0) >= threshold;\n\nconst outsideRule = String(S.escalate_when_not_in_kb || 'yes').toLowerCase() === 'yes';\nconst outside = status === 'not_in_kb' && outsideRule && !injection;\n\nlet reason = wantsHuman ? 'asked_for_person' : frustrated ? 'frustrated' : outside ? 'outside_kb' : null;\n\n// ---------- 4. Contact details (only if the customer actually wrote them) ----------\nconst customerText = [text, ...p.history.filter((h) => h.role === 'user').map((h) => String(h.content))]\n  .join('\\n').toLowerCase();\nconst emailRe = /[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/i;\nconst asEmail = (v) => {\n  const hit = typeof v === 'string' ? v.match(emailRe) : null;\n  const e = hit ? hit[0].toLowerCase() : null;\n  return e && customerText.includes(e) ? e : null;\n};\nconst newEmail = asEmail(m.contact_email) || asEmail(text);\nconst email = newEmail || conv.contact_email || null;\n\nlet newName = null;\nif (typeof m.contact_name === 'string' && m.contact_name.trim()) {\n  const candidate = m.contact_name.trim().slice(0, 80);\n  if (customerText.includes(candidate.toLowerCase().split(' ')[0])) newName = candidate;\n}\nconst name = newName || conv.contact_name || null;\nconst phone = conv.contact_phone || null;\nconst reachable = !!email || (channel === 'whatsapp' && !!phone);\n\n// ---------- 5. Decide the reply and the action ----------\nconst fill = (t) => String(t || '').split('{{email}}').join(email || '').split('{{name}}').join(name || '');\nconst prefixFor = (r) => (r === 'frustrated' ? S.prefix_frustrated || '' : r === 'outside_kb' ? S.prefix_outside_kb || '' : '');\nconst firstName = name ? String(name).split(' ')[0] : null;\nconst thanks = firstName ? `Thanks, ${firstName}. ` : 'Thanks. ';\nconst handoffText = () => (email\n  ? fill(S.handoff_email_text)\n  : channel === 'whatsapp' && phone ? fill(S.handoff_phone_text) : fill(S.handoff_no_contact_text));\nconst answerPart = status === 'answered' && m.reply ? `${m.reply} ` : '';\n\nlet reply = m.reply;\nlet action = 'none';\nconst state = {};\nconst current = conv.status || 'bot';\nconst pending = conv.pending_reason || null;\nconst asks = conv.contact_asks || 0;\n\nif (current === 'handed_off') {\n  if (reason) {\n    action = 'handoff_followup';\n    reply = answerPart + (reason === 'outside_kb' ? prefixFor(reason) : '') + fill(S.already_handed_off_text);\n  } else if (status === 'not_in_kb') {\n    reply = fill(S.not_sure_text);\n  }\n} else if (current === 'collecting_contact') {\n  if (m.declines_handoff === true && !wantsHuman) {\n    reply = fill(S.declined_text);\n    state.status = 'bot';\n    state.pending_reason = null;\n    state.contact_asks = 0;\n    reason = null;\n  } else if (reachable) {\n    action = 'handoff_now';\n    reason = pending || reason || 'asked_for_person';\n    reply = (newEmail ? thanks : '') + answerPart + handoffText();\n  } else if (asks >= N.max_contact_asks) {\n    action = 'handoff_now';\n    reason = pending || reason || 'asked_for_person';\n    reply = answerPart + fill(S.handoff_no_contact_text);\n  } else {\n    state.contact_asks = asks + 1;\n    reply = answerPart + fill(S.reask_email_text);\n    reason = null;\n  }\n} else if (reason) {\n  if (reachable) {\n    action = 'handoff_now';\n    reply = (newEmail && firstName ? thanks : '') + answerPart + prefixFor(reason) + handoffText();\n  } else {\n    action = 'ask_contact';\n    state.status = 'collecting_contact';\n    state.pending_reason = reason;\n    state.contact_asks = 1;\n    reply = answerPart + prefixFor(reason) + fill(S.ask_contact_text);\n  }\n} else if (status === 'not_in_kb') {\n  reply = fill(S.not_sure_text);\n}\n\nif (!reply) reply = fill(S.not_sure_text);\n\n// ---------- 6. Conversation changes for log_reply ----------\nif (newEmail) state.contact_email = newEmail;\nif (newName) state.contact_name = newName;\nif (m.issue_type && m.issue_type !== 'other') state.issue_type = m.issue_type;\nelse if (!conv.issue_type && m.issue_type) state.issue_type = 'other';\nif (status === 'not_in_kb') state.not_sure_inc = 1;\n\nconst usage = res.usage || (res.usageMetadata\n  ? { input_tokens: res.usageMetadata.promptTokenCount, output_tokens: res.usageMetadata.candidatesTokenCount }\n  : {});\nreturn [{\n  json: {\n    session_id: p.input.session_id,\n    channel,\n    is_test: p.input.is_test,\n    dry_run: p.input.dry_run,\n    phone_number_id: p.input.phone_number_id,\n    reply: reply.replace(/\\s+\\n/g, '\\n').trim(),\n    answer_status: status,\n    model_answer_status: m.answer_status,\n    action,\n    reason: action === 'none' ? null : reason,\n    state,\n    flags,\n    retrieved: ms.sources,\n    cited,\n    best_score: ms.best_score,\n    model: res.model || res.modelVersion || S.model || null,\n    prompt_version: S.prompt_version || null,\n    tokens_in: usage.input_tokens ?? null,\n    tokens_out: usage.output_tokens ?? null,\n    latency_ms: Date.now() - Number($('Config').first().json.started_ms || Date.now()),\n    contact: { name, email, phone },\n    issue_type: state.issue_type || conv.issue_type || null,\n    frustration: m.frustration || 'none',\n    latest_text: text,\n    delivery: {\n      slack_channel: S.slack_channel || null,\n      team_email: S.team_email || null,\n      from_email: S.from_email || null,\n      sheet_id: S.sheet_id || null,\n    },\n  },\n}];\n"
+      },
+      "id": "8dfac51e-0156-5314-90d8-e9ddfaa06311",
+      "name": "Apply Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2310,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Limit Reply: a message cap was reached, so no search or model call is made.\nconst p = $('Prepare Turn').first().json;\nconst S = p.settings;\nconst conv = p.conversation || {};\nreturn [{\n  json: {\n    session_id: p.input.session_id,\n    channel: p.input.channel,\n    is_test: p.input.is_test,\n    dry_run: p.input.dry_run,\n    phone_number_id: p.input.phone_number_id,\n    reply: S.limit_text || 'This chat has reached its message limit. Please try again later.',\n    answer_status: 'limit',\n    model_answer_status: null,\n    action: 'none',\n    reason: null,\n    state: {},\n    flags: { limit_reason: p.limit_reason },\n    retrieved: [],\n    cited: [],\n    best_score: null,\n    model: null,\n    prompt_version: S.prompt_version || null,\n    tokens_in: null,\n    tokens_out: null,\n    latency_ms: Date.now() - Number($('Config').first().json.started_ms || Date.now()),\n    contact: { name: conv.contact_name || null, email: conv.contact_email || null, phone: conv.contact_phone || null },\n    issue_type: conv.issue_type || null,\n    frustration: 'none',\n    latest_text: p.input.text,\n    delivery: {\n      slack_channel: S.slack_channel || null,\n      team_email: S.team_email || null,\n      from_email: S.from_email || null,\n      sheet_id: S.sheet_id || null,\n    },\n  },\n}];\n"
+      },
+      "id": "0cb738e8-5ba7-5bab-be70-3851b6b68bb3",
+      "name": "Limit Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Skip Duplicate: WhatsApp delivered the same message twice; nothing is sent the second time.\nconst p = $('Prepare Turn').first().json;\nreturn [{ json: { output: '', reply: '', skip: true, session_id: p.input.session_id, answer_status: 'duplicate', action: 'none' } }];\n"
+      },
+      "id": "ee9360f2-541c-5821-b14c-e671628b9e74",
+      "name": "Skip Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fallback Reply: the knowledge base search or the model call failed after its retries.\n// The customer gets a polite reply, the turn is logged, and the team is alerted.\nconst p = $('Prepare Turn').first().json;\nconst S = p.settings;\nconst conv = p.conversation || {};\nconst err = $input.first().json || {};\nconst message = (err.error && (err.error.message || err.error.description)) || err.message || 'Unknown error';\nconst failedNode = $('Ask Model').isExecuted ? 'Ask Model'\n  : $('Search Knowledge Base').isExecuted ? 'Search Knowledge Base'\n  : $('Embed Query').isExecuted ? 'Embed Query' : 'Search Queries';\nconst cfg = $('Config').first().json;\n\nreturn [{\n  json: {\n    session_id: p.input.session_id,\n    channel: p.input.channel,\n    is_test: p.input.is_test,\n    dry_run: p.input.dry_run,\n    phone_number_id: p.input.phone_number_id,\n    reply: S.fallback_text || 'Sorry, I am having trouble answering right now. Please try again in a few minutes.',\n    answer_status: 'error',\n    model_answer_status: null,\n    action: 'none',\n    reason: null,\n    state: {},\n    flags: { error: String(message).slice(0, 500), failed_node: failedNode },\n    retrieved: [],\n    cited: [],\n    best_score: null,\n    model: S.model || null,\n    prompt_version: S.prompt_version || null,\n    tokens_in: null,\n    tokens_out: null,\n    latency_ms: Date.now() - Number(cfg.started_ms || Date.now()),\n    contact: { name: conv.contact_name || null, email: conv.contact_email || null, phone: conv.contact_phone || null },\n    issue_type: conv.issue_type || null,\n    frustration: 'none',\n    latest_text: p.input.text,\n    delivery: {\n      slack_channel: S.slack_channel || null,\n      team_email: S.team_email || null,\n      from_email: S.from_email || null,\n      sheet_id: S.sheet_id || null,\n    },\n    alert: {\n      workflow: '20 - Answer Message',\n      node: failedNode,\n      message: String(message).slice(0, 500),\n      session_id: p.input.session_id,\n      is_test: p.input.is_test,\n      execution_url: `${cfg.n8n_url}/workflow/${$workflow.id}/executions/${$execution.id}`,\n    },\n  },\n}];\n"
+      },
+      "id": "f3880ce8-1709-5501-82c3-31906f33ab37",
+      "name": "Fallback Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "scErrorAlerts000",
+          "mode": "list",
+          "cachedResultName": "90 - Error Alerts",
+          "cachedResultUrl": "/workflow/scErrorAlerts000"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "2536a9d2-4965-5687-8e0c-bd0ccd0a4917",
+      "name": "Alert Team",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reply Data: picks the reply from whichever path produced it (answer, message cap or fallback).\nfor (const name of ['Apply Rules', 'Limit Reply', 'Fallback Reply']) {\n  if ($(name).isExecuted) return [{ json: $(name).first().json }];\n}\nthrow new Error('No reply was produced for this message');\n"
+      },
+      "id": "0f9204e6-e038-5f40-8974-bcb82e385416",
+      "name": "Reply Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.supabase_url }}/rest/v1/rpc/log_reply",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_session_id: $json.session_id, p_reply: $json.reply, p_answer_status: $json.answer_status, p_sources: { retrieved: $json.retrieved, cited: $json.cited }, p_best_score: $json.best_score, p_flags: $json.flags, p_model: $json.model, p_prompt_version: $json.prompt_version, p_tokens_in: $json.tokens_in, p_tokens_out: $json.tokens_out, p_latency_ms: $json.latency_ms, p_state: $json.state }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "2f80466d-2a96-5e83-920e-ba84a2855b01",
+      "name": "Log Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "scSupabaseCred01",
+          "name": "Supabase - Support Chatbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "014bea37-a33d-54f8-bc3e-30c7243688aa",
+              "leftValue": "={{ ['handoff_now', 'handoff_followup'].includes($('Reply Data').first().json.action) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "b071f88a-a8a3-580d-94ed-41a496577fd0",
+      "name": "Needs Team?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Escalation Input: what 30 - Escalate to Team needs to hand the chat to a person.\nconst r = $('Reply Data').first().json;\nreturn [{\n  json: {\n    session_id: r.session_id,\n    channel: r.channel,\n    action: r.action,\n    reason: r.reason,\n    latest_text: r.latest_text,\n    reply: r.reply,\n    contact: r.contact,\n    issue_type: r.issue_type,\n    dry_run: !!r.dry_run,\n    slack_channel: r.delivery.slack_channel,\n    team_email: r.delivery.team_email,\n    from_email: r.delivery.from_email,\n  },\n}];\n"
+      },
+      "id": "af8be8f1-1e50-55f8-974f-8e7e0a3421cb",
+      "name": "Escalation Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "scEscalate000000",
+          "mode": "list",
+          "cachedResultName": "30 - Escalate to Team",
+          "cachedResultUrl": "/workflow/scEscalate000000"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "d068b1ee-b1ad-55b6-8e1f-387eb73531ac",
+      "name": "Escalate",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3300,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "361b08c2-5ea3-5d45-b719-8cd7c4df6aa8",
+              "leftValue": "={{ !$('Reply Data').first().json.is_test && /^[A-Za-z0-9_-]{20,}$/.test(String($('Reply Data').first().json.delivery.sheet_id || '')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "56438ac6-fb70-528f-9e3b-324c8ee9d901",
+      "name": "Write Log Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log Row: one row per conversation in the Google Sheets log, updated after every reply.\n// Column names match the header row of the \"conversations\" tab.\nconst r = $('Reply Data').first().json;\nconst logged = $('Log Reply').first().json || {};\nconst c = logged.conversation || {};\nconst esc = $('Escalate').isExecuted ? $('Escalate').first().json : null;\n\nlet status = c.status || (r.state && r.state.status) || 'bot';\nif (esc && esc.claimed) status = 'handed_off';\n\nconst maskPhone = (ph) => (ph ? `${String(ph).slice(0, 2)}****${String(ph).slice(-4)}` : '');\nconst iso = (t) => (t ? new Date(t).toISOString().replace('T', ' ').slice(0, 19) : '');\n\nreturn [{\n  json: {\n    session_id: r.session_id,\n    started_at: iso(c.started_at),\n    last_message_at: iso(c.last_message_at || Date.now()),\n    channel: r.channel,\n    status,\n    handoff_reason: (esc && esc.claimed ? r.reason : c.handoff_reason) || '',\n    name: c.contact_name || (r.contact && r.contact.name) || '',\n    email: c.contact_email || (r.contact && r.contact.email) || '',\n    phone: maskPhone(c.contact_phone),\n    issue_type: c.issue_type || r.issue_type || '',\n    messages: c.message_count || '',\n    not_sure_count: c.not_sure_count ?? '',\n    first_question: c.first_question || '',\n    last_answer_status: r.answer_status || '',\n    transcript: logged.transcript_text || '',\n  },\n}];\n"
+      },
+      "id": "b11f31fc-8592-5f3b-942e-80b97cf12b3f",
+      "name": "Log Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Reply Data').first().json.delivery.sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "conversations",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "session_id"
+          ],
+          "schema": [
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "started_at",
+              "displayName": "started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_message_at",
+              "displayName": "last_message_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "handoff_reason",
+              "displayName": "handoff_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "issue_type",
+              "displayName": "issue_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "messages",
+              "displayName": "messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "not_sure_count",
+              "displayName": "not_sure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "first_question",
+              "displayName": "first_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_answer_status",
+              "displayName": "last_answer_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "transcript",
+              "displayName": "transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW",
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "id": "bf67e1f0-d380-5d57-b3f7-e907dea1d37f",
+      "name": "Log to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3960,
+        200
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "scGoogleSACred01",
+          "name": "Google Service Account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Return Reply: the result handed back to the channel workflow (and to the test runner).\nconst r = $('Reply Data').first().json;\nconst logged = $('Log Reply').isExecuted ? $('Log Reply').first().json || {} : {};\nconst c = logged.conversation || {};\nconst esc = $('Escalate').isExecuted ? $('Escalate').first().json : null;\n\nlet status = c.status || (r.state && r.state.status) || null;\nif (esc && esc.claimed) status = 'handed_off';\nif (logged.error) r.flags.log_error = String(logged.error.message || logged.error).slice(0, 300);\n\nreturn [{\n  json: {\n    output: r.reply,\n    reply: r.reply,\n    skip: false,\n    session_id: r.session_id,\n    phone_number_id: r.phone_number_id || null,\n    answer_status: r.answer_status,\n    model_answer_status: r.model_answer_status,\n    action: r.action,\n    reason: r.reason,\n    status,\n    cited: r.cited || [],\n    cited_titles: (r.retrieved || []).filter((s) => (r.cited || []).includes(s.label)).map((s) => s.title),\n    sources: (r.retrieved || []).map((s) => ({ label: s.label, title: s.title, score: s.score })),\n    best_score: r.best_score,\n    flags: r.flags || {},\n    contact: r.contact,\n    issue_type: r.issue_type,\n    frustration: r.frustration,\n    escalation: esc\n      ? {\n        claimed: esc.claimed ?? null,\n        sent_slack: esc.sent_slack ?? null,\n        sent_email: esc.sent_email ?? null,\n        dry_run: esc.dry_run ?? null,\n        transcript_lines: esc.transcript_lines ?? null,\n        transcript_text: esc.transcript_text ? String(esc.transcript_text).slice(0, 4000) : null,\n        followup: esc.followup ?? null,\n      }\n      : null,\n    model: r.model,\n    prompt_version: r.prompt_version,\n    tokens_in: r.tokens_in,\n    tokens_out: r.tokens_out,\n    latency_ms: r.latency_ms,\n  },\n}];\n"
+      },
+      "id": "e7c0a2ca-1b0d-5a98-804a-92c76564c837",
+      "name": "Return Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store Down Reply: Supabase could not be reached, so there are no settings and nothing can be\n// logged. The customer still gets a reply and the team is alerted.\nconst cfg = $('Config').first().json;\nconst err = $input.first().json || {};\nconst message = (err.error && (err.error.message || err.error.description)) || err.message || 'Unknown error';\nreturn [{\n  json: {\n    output: cfg.store_down_text,\n    reply: cfg.store_down_text,\n    skip: false,\n    answer_status: 'error',\n    action: 'none',\n    reason: null,\n    status: null,\n    cited: [],\n    sources: [],\n    best_score: null,\n    flags: { error: String(message).slice(0, 500), failed_node: 'Register Message' },\n    session_id: cfg.session_id,\n    phone_number_id: cfg.phone_number_id || null,\n    alert: {\n      workflow: '20 - Answer Message',\n      node: 'Register Message',\n      message: String(message).slice(0, 500),\n      session_id: cfg.session_id,\n      is_test: !!cfg.is_test,\n      execution_url: `${cfg.n8n_url}/workflow/${$workflow.id}/executions/${$execution.id}`,\n    },\n  },\n}];\n"
+      },
+      "id": "00957164-30df-5278-9f0a-209fe88fde8d",
+      "name": "Store Down Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "scErrorAlerts000",
+          "mode": "list",
+          "cachedResultName": "90 - Error Alerts",
+          "cachedResultUrl": "/workflow/scErrorAlerts000"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "08f8c096-9949-5898-8c97-8f1669ed0944",
+      "name": "Alert Store Down",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "720cbb97-b29c-5b0e-a702-83dc4ff6002f",
+      "name": "Return Store Down",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        800
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Register Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Message": {
+      "main": [
+        [
+          {
+            "node": "Prepare Turn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Down Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Turn": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Limit Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Queries": {
+      "main": [
+        [
+          {
+            "node": "Embed Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Search Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Search OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search OK?": {
+      "main": [
+        [
+          {
+            "node": "Ask Model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Model": {
+      "main": [
+        [
+          {
+            "node": "Apply Rules",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Rules": {
+      "main": [
+        [
+          {
+            "node": "Reply Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Reply": {
+      "main": [
+        [
+          {
+            "node": "Reply Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Reply": {
+      "main": [
+        [
+          {
+            "node": "Alert Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Team": {
+      "main": [
+        [
+          {
+            "node": "Reply Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Data": {
+      "main": [
+        [
+          {
+            "node": "Log Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Reply": {
+      "main": [
+        [
+          {
+            "node": "Needs Team?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Team?": {
+      "main": [
+        [
+          {
+            "node": "Escalation Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Log Row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Input": {
+      "main": [
+        [
+          {
+            "node": "Escalate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate": {
+      "main": [
+        [
+          {
+            "node": "Write Log Row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Log Row?": {
+      "main": [
+        [
+          {
+            "node": "Log Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Row": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Return Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Down Reply": {
+      "main": [
+        [
+          {
+            "node": "Alert Store Down",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Store Down": {
+      "main": [
+        [
+          {
+            "node": "Return Store Down",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "scErrorAlerts000"
+  },
+  "versionId": "88cfa944-5225-5031-ba3a-a27ea9ecb50a",
+  "id": "scAnswerMessage0",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

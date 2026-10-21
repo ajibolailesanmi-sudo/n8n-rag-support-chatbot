@@ -1,0 +1,240 @@
+{
+  "name": "90 - Error Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 90 - Error Alerts\nSet as the error workflow of every other workflow, and also called directly when 20 - Answer Message catches a failure. Alerts go to Slack and email with a link to the failed execution. Settings are fixed here so alerts still work if Supabase is down.",
+        "height": 180,
+        "width": 580,
+        "color": 4
+      },
+      "id": "2a2420f2-49bd-56a1-b1d4-54e413797444",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bdbfb873-b4c1-5127-b5f8-6e920d84740c",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "432ead4f-3f6a-531d-81b7-d4805aff2a55",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1953acd5-4427-5e51-8f0c-e6a90e7bcc08",
+              "name": "slack_channel",
+              "value": "#chat-escalations",
+              "type": "string"
+            },
+            {
+              "id": "b9b6b64f-23b1-59fd-956d-7c3662019323",
+              "name": "alert_email",
+              "value": "alerts@example.com",
+              "type": "string"
+            },
+            {
+              "id": "17725a79-5acd-50c0-a3bc-265ae35227cf",
+              "name": "from_email",
+              "value": "assistant@example.com",
+              "type": "string"
+            },
+            {
+              "id": "d3a2bf28-9233-54f7-9482-3c6fa9a1137e",
+              "name": "timezone",
+              "value": "America/New_York",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "7d55bbe8-55a2-563a-ac08-42fabcc67564",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Error: turns either kind of failure into one alert.\n// Unhandled: a workflow failed and n8n called this workflow through its Error Trigger.\n// Handled: 20 - Answer Message caught a failure, replied to the customer and asked for an alert.\nconst cfg = $('Config').first().json;\nlet a;\nif ($('Error Trigger').isExecuted) {\n  const e = $('Error Trigger').first().json;\n  const ex = e.execution || {};\n  a = {\n    kind: 'Workflow failed',\n    workflow: (e.workflow && e.workflow.name) || 'Unknown workflow',\n    node: ex.lastNodeExecuted || (ex.error && ex.error.node && ex.error.node.name) || 'unknown',\n    message: (ex.error && (ex.error.message || ex.error.description)) || (e.trigger && e.trigger.error && e.trigger.error.message) || 'No error message',\n    url: ex.url || null,\n    session_id: null,\n    is_test: false,\n  };\n} else {\n  const h = $('When Called').first().json;\n  const al = h.alert || h;\n  a = {\n    kind: 'Customer got the fallback reply',\n    workflow: al.workflow || '20 - Answer Message',\n    node: al.node || 'unknown',\n    message: al.message || 'No error message',\n    url: al.execution_url || null,\n    session_id: al.session_id || null,\n    is_test: !!al.is_test,\n  };\n}\nconst when = new Date().toLocaleString('en-US', { timeZone: cfg.timezone || 'America/New_York' });\nconst lines = [\n  `*${a.kind}:* ${a.workflow}`,\n  `*Node:* ${a.node}`,\n  `*Error:* ${String(a.message).slice(0, 600)}`,\n  a.session_id ? `*Session:* \\`${a.session_id}\\`${a.is_test ? ' (test)' : ''}` : null,\n  a.url ? `*Execution:* ${a.url}` : null,\n  `*When:* ${when}`,\n].filter(Boolean);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst html = `<div style=\"font-family:Inter,Segoe UI,Arial,sans-serif;color:#101820\">\n<p><strong>${esc(a.kind)}:</strong> ${esc(a.workflow)}</p>\n<p>Node: ${esc(a.node)}<br>Error: ${esc(a.message)}<br>${a.session_id ? `Session: ${esc(a.session_id)}<br>` : ''}When: ${esc(when)}</p>\n${a.url ? `<p><a href=\"${esc(a.url)}\">Open the execution in n8n</a></p>` : ''}\n<p style=\"color:#5b6470;font-size:12px\">Sent by the support chat assistant's error workflow. Solvant Labs demo build.</p></div>`;\nreturn [{ json: { ...a, slack_text: lines.join('\\n'), subject: `[Chat assistant alert] ${a.workflow}: ${String(a.message).slice(0, 80)}`, html } }];\n"
+      },
+      "id": "fe504004-791b-5823-8f4c-0fcc07264f13",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.slack_channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "mrkdwn": true
+        }
+      },
+      "id": "04533a34-f7e3-5cbb-981e-393b5354240f",
+      "name": "Post Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        660,
+        360
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "scSlackCred00001",
+          "name": "Slack Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.from_email }}",
+        "toEmail": "={{ $('Config').first().json.alert_email }}",
+        "subject": "={{ $('Format Error').first().json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $('Format Error').first().json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6c625da4-a832-5852-b6d2-597afac48594",
+      "name": "Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        360
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "scSmtpCred000001",
+          "name": "SMTP"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Post Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Alert": {
+      "main": [
+        [
+          {
+            "node": "Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "America/New_York",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "aaf1aacb-96b9-5c91-b779-2b3b62b87610",
+  "id": "scErrorAlerts000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}
