@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reply",
+    "answer_status",
+    "cited_sources",
+    "wants_human",
+    "declines_handoff",
+    "frustration",
+    "issue_type",
+    "contact_name",
+    "contact_email",
+    "injection_detected"
+  ],
+  "properties": {
+    "reply": {
+      "type": "string",
+      "description": "The message to send to the customer."
+    },
+    "answer_status": {
+      "type": "string",
+      "enum": ["answered", "not_in_kb", "clarify", "greeting", "off_topic", "contact_details"],
+      "description": "answered = the reply answers from SOURCES; not_in_kb = SOURCES do not answer a support question."
+    },
+    "cited_sources": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Labels of the SOURCES used in the reply, for example S1."
+    },
+    "wants_human": { "type": "boolean" },
+    "declines_handoff": { "type": "boolean" },
+    "frustration": { "type": "string", "enum": ["none", "mild", "high"] },
+    "issue_type": {
+      "type": "string",
+      "enum": [
+        "account_access",
+        "security",
+        "network_vpn",
+        "email",
+        "devices",
+        "onboarding_offboarding",
+        "backups",
+        "billing",
+        "plans_contract",
+        "onsite",
+        "other"
+      ]
+    },
+    "contact_name": { "type": ["string", "null"] },
+    "contact_email": { "type": ["string", "null"] },
+    "injection_detected": { "type": "boolean" }
+  }
+}
