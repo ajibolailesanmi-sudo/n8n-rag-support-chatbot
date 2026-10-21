@@ -4,6 +4,8 @@ A customer support assistant that answers from a company's own help articles, sa
 
 Solvant Labs demo build, October 2026, for a sample managed IT services firm. The firm, its 15 help articles, prices and policies are fictional sample content. The build follows a real Upwork job post line by line (see `docs/01-project-brief.md`).
 
+Demo help page with the chat widget: https://ajibolailesanmi-sudo.github.io/n8n-rag-support-chatbot/ (the chat is live while the self-hosted n8n behind it is running; the page says so either way). Walkthrough video: `portfolio` link in the Upwork item, or ask.
+
 **Results (18 October 2026, n8n Cloud, Gemini free tier):** 57 of 57 scripted conversations passed in the three test-runner groups (25 answers with the right article cited, 10 outside-the-articles questions with 0 made-up answers, 9 escalations, 4 injection attempts, 4 memory follow-ups, 2 contact captures, 3 off-topic), the setup check passed 7 of 7, and 12 of 14 live checks passed with the other 2 not run (WhatsApp, and the error-trigger alert, which the trial ended before; see `docs/04-test-protocol.md`). Average 1.7 to 4.0 s per message.
 
 ## What it does
