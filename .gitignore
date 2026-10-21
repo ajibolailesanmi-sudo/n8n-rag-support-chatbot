@@ -1,0 +1,9 @@
+# account-specific values and local test output
+scripts/live-ids.json
+scripts/local-ids.json
+out/
+__pycache__/
+*.pyc
+.DS_Store
+
+.env
