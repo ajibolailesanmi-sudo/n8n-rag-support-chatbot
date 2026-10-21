@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IT Help Centre (sample) · Solvant Labs demo</title>
+  <meta name="description" content="Sample help centre with an AI support assistant built on n8n, Supabase and OpenAI. Solvant Labs demo build.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@n8n/chat@1.42.4/dist/style.css" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #f7f8f6;
+      --card: #ffffff;
+      --ink: #101820;
+      --muted: #5b6470;
+      --line: #dfe3e8;
+      --signal: #1f6feb;
+      --signal-soft: #e8f0fe;
+      --chat--color--primary: #1f6feb;
+      --chat--color--primary-shade-50: #1a5fcc;
+      --chat--color--primary--shade-100: #154fa8;
+      --chat--color--secondary: #101820;
+      --chat--color-secondary-shade-50: #0b1117;
+      --chat--color-white: #ffffff;
+      --chat--color-light: #f7f8f6;
+      --chat--color-light-shade-50: #eceee9;
+      --chat--color-light-shade-100: #dfe3e8;
+      --chat--color-medium: #c9ced4;
+      --chat--color-dark: #101820;
+      --chat--color-disabled: #8a929b;
+      --chat--color-typing: #5b6470;
+      --chat--font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+      --chat--header--background: #101820;
+      --chat--header--color: #f7f8f6;
+      --chat--message--bot--background: #ffffff;
+      --chat--message--bot--color: #101820;
+      --chat--message--user--background: #1f6feb;
+      --chat--message--user--color: #ffffff;
+      --chat--toggle--background: #1f6feb;
+      --chat--toggle--hover--background: #1a5fcc;
+      --chat--window--width: 380px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.55 Inter, 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--signal); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+    header { border-bottom: 1px solid var(--line); background: var(--card); }
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; flex-wrap: wrap; }
+    .brand { font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+    .badge { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; background: var(--paper); }
+    .hero { padding-block: 56px 32px; }
+    h1 { font-family: 'Space Grotesk', Inter, sans-serif; font-weight: 600; font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+    .lead { color: var(--muted); max-width: 60ch; margin: 0; }
+    .ask { margin-top: 22px; display: inline-flex; align-items: center; gap: 10px; background: var(--signal-soft); color: var(--ink); border-radius: 12px; padding: 12px 16px; font-weight: 500; }
+    .ask span { font-size: 14px; color: var(--muted); font-weight: 400; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; padding-bottom: 48px; }
+    .group { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; }
+    .group h2 { font-family: 'Space Grotesk', Inter, sans-serif; font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
+    .group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .group li { font-size: 15px; }
+    .tries { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 48px; }
+    .tries h2 { font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; margin: 0 0 8px; }
+    .tries ul { margin: 0; padding-left: 20px; color: var(--muted); }
+    footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    footer .wrap { padding-block: 20px 40px; display: grid; gap: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap bar">
+      <div class="brand">IT Help Centre</div>
+      <div class="badge">Sample content · Solvant Labs demo build</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>How can we help?</h1>
+      <p class="lead">Browse the help articles, or ask the assistant in the corner. It answers from these articles only, says when it isn't sure, and passes you to a person when you need one.</p>
+      <div class="ask">Chat with the assistant <span>bottom right</span></div>
+    </section>
+
+    <section class="grid" aria-label="Help articles">
+      <div class="group">
+        <h2>Getting help</h2>
+        <ul>
+          <li>Support hours and how to reach us</li>
+          <li>Response times by priority</li>
+          <li>Onsite visits</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h2>Accounts and security</h2>
+        <ul>
+          <li>Resetting your password</li>
+          <li>Setting up multi-factor authentication</li>
+          <li>Reporting phishing or a security incident</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h2>Devices and access</h2>
+        <ul>
+          <li>Connecting to the VPN</li>
+          <li>Email on your phone</li>
+          <li>Ordering laptops and equipment</li>
+          <li>Backups and restoring files</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h2>People</h2>
+        <ul>
+          <li>Adding a new employee</li>
+          <li>When an employee leaves</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h2>Plans and billing</h2>
+        <ul>
+          <li>Managed IT plans and pricing</li>
+          <li>Billing and invoices</li>
+          <li>Changing plans or cancelling</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="tries">
+      <h2>Things to try</h2>
+      <ul>
+        <li>"How much is the Business plan?" then "does it include backups?"</li>
+        <li>"Do you support Mac computers?" (not in the articles, so it should say it isn't sure)</li>
+        <li>"I'd like to talk to a person"</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>This page is a Solvant Labs demo. The IT services firm, its prices and its policies are fictional sample content.</div>
+      <div>Built with n8n, Supabase (pgvector) and the Gemini API. Source and test results: <a href="https://github.com/ajibolailesanmi-sudo/n8n-rag-support-chatbot">GitHub repository</a>.</div>
+      <div id="chat-status">The demo chat runs on a self-hosted n8n and is online when that machine is. When it is offline, the walkthrough video and the test results in the repository show what it does.</div>
+      <div>Chats are logged for the demo. Please don't share passwords or personal information.</div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat@1.42.4/dist/chat.bundle.es.js';
+    // The chat address of the n8n that serves this page: the Chat Trigger's production URL from
+    // 10 - Website Chat. A ?chat= parameter overrides it for demos on another n8n instance.
+    const DEFAULT_CHAT_URL = '__CHAT_WEBHOOK_URL__';
+    const chatUrl = new URLSearchParams(location.search).get('chat') || DEFAULT_CHAT_URL;
+    const status = document.getElementById('chat-status');
+    if (!chatUrl.startsWith('http')) {
+      status.textContent = 'The demo chat is not connected on this copy of the page (no chat address set).';
+    } else {
+      // An OPTIONS/GET to the chat address answers only when the n8n behind it is up.
+      fetch(chatUrl, { method: 'OPTIONS' }).then(() => {
+        status.textContent = 'The demo chat is online: use the button at the bottom right.';
+      }).catch(() => {
+        status.textContent = 'The demo chat is offline right now (the self-hosted n8n behind it is not running). The walkthrough video and the test results in the repository show what it does.';
+      });
+    }
+    if (chatUrl.startsWith('http')) createChat({
+      webhookUrl: chatUrl,
+      mode: 'window',
+      showWelcomeScreen: false,
+      loadPreviousSession: false,
+      enableStreaming: false,
+      initialMessages: [
+        "Hi! I'm the help desk assistant for this sample IT services firm.",
+        "Ask me about passwords, MFA, the VPN, email, billing, plans or support hours. If I can't help, I'll pass you to a person."
+      ],
+      i18n: {
+        en: {
+          title: 'IT Help Desk',
+          subtitle: 'Sample help centre. Solvant Labs demo build.',
+          footer: '',
+          getStarted: 'New conversation',
+          inputPlaceholder: 'Ask about passwords, VPN, billing...',
+        },
+      },
+    });
+  </script>
+</body>
+</html>
