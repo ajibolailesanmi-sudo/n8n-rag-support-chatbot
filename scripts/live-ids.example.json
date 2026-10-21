@@ -1,0 +1,23 @@
+{
+  "supabase_url": "https://YOUR-PROJECT.supabase.co",
+  "openai_url": "https://api.openai.com/v1",
+  "n8n_url": "https://YOUR-INSTANCE.app.n8n.cloud",
+  "allowed_origins": "https://YOUR-INSTANCE.app.n8n.cloud, https://YOUR-WEBSITE.example",
+  "alert_slack_channel": "#chat-escalations",
+  "alert_email": "alerts@example.com",
+  "from_email": "assistant@example.com",
+  "credentials": {
+    "OpenAI - Support Chatbot": {"id": "N8N_CREDENTIAL_ID"},
+    "Supabase - Support Chatbot": {"id": "N8N_CREDENTIAL_ID"},
+    "Google Service Account": {"id": "N8N_CREDENTIAL_ID"},
+    "Slack Bot": {"id": "N8N_CREDENTIAL_ID"},
+    "SMTP": {"id": "N8N_CREDENTIAL_ID"},
+    "WhatsApp OAuth - Support Chatbot": {"id": "N8N_CREDENTIAL_ID"},
+    "WhatsApp API - Support Chatbot": {"id": "N8N_CREDENTIAL_ID"}
+  },
+  "workflow_ids": {
+    "errors": "ID OF 90 - Error Alerts AFTER IMPORT",
+    "escalate": "ID OF 30 - Escalate to Team AFTER IMPORT",
+    "answer": "ID OF 20 - Answer Message AFTER IMPORT"
+  }
+}
